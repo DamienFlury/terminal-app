@@ -2,11 +2,19 @@ import React, { useState } from 'react';
 import styled from 'styled-components';
 import StyledTerminal from '../styled-components/StyledTerminal';
 
+
+const TerminalInputLine = styled.div`
+    display: block;
+    width: 100%;
+`;
+
+const Prompt = styled.span`
+  color: green;
+`;
+
 const TerminalInput = styled.input`
     border: none;
     background: none;
-    display: block;
-    width: 100%;
     color: white;
     outline: none;
     font-family: inherit;
@@ -23,9 +31,15 @@ const files: any = {
   },
 };
 
+type HistoryItem = {
+  id: number,
+  command: string,
+  response: string | null,
+};
+
 type ResolveInput = {
     setPath: React.Dispatch<React.SetStateAction<string[]>>,
-    setOutput: React.Dispatch<React.SetStateAction<string>>,
+    setHistory: React.Dispatch<React.SetStateAction<HistoryItem[]>>,
     args: string[],
     path: string[],
     dir: any
@@ -33,7 +47,7 @@ type ResolveInput = {
 
 type Command = {
     command: string,
-    resolve: ({ setPath, setOutput, args }: ResolveInput) => void,
+    resolve: ({ setPath, setHistory, args }: ResolveInput) => string | null,
 }
 
 const commands: Command[] = [
@@ -45,37 +59,68 @@ const commands: Command[] = [
       } else {
         setPath((prev) => [...prev, destination]);
       }
+      return null;
     },
   },
   {
     command: 'ls',
-    resolve: ({ setOutput, dir }) => {
-      setOutput(Object.keys(dir).join('\n'));
-    },
+    resolve: ({ dir }) => Object.keys(dir).join('\n'),
   },
 ];
 
+let id = 1;
+
 const Terminal: React.FC = () => {
-  const [input, setInput] = useState('');
-  const [output, setOutput] = useState('');
+  const [input, setInput] = useState({
+    prompt: '~',
+    command: '',
+  });
   const [path, setPath] = useState<string[]>([]);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+
 
   const dir = path.reduce((acc, cur) => acc[cur], files);
 
 
   const handleSubmit = (e: React.FormEvent<Element>) => {
     e.preventDefault();
-    const [command, ...args] = input.split(' ');
+    const [command, ...args] = input.command.split(' ');
 
-    commands.filter((c) => c.command === command)[0].resolve({
-      setOutput, setPath, args, path, dir,
+    id += 1;
+    if (!commands.some((c) => c.command === command)) {
+      setHistory((prev) => [...prev, { id, command: input.command, response: `Error: ${input} is not a command` }]);
+      setInput({ prompt: '~', command: '' });
+      return;
+    }
+
+    const response = commands.filter((c) => c.command === command)[0].resolve({
+      setHistory, setPath, args, path, dir,
     });
+
+    setHistory((prev) => [...prev, { id, command: input.command, response }]);
+
+    setInput({ prompt: '~', command: '' });
   };
   return (
     <StyledTerminal>
       <form onSubmit={handleSubmit}>
-        <TerminalInput value={input} onChange={(e) => setInput(e.target.value)} autoFocus />
-        <p>{output}</p>
+        {history.map((h) => (
+          <div key={h.id}>
+            <p>{h.command}</p>
+            <p>{h.response}</p>
+          </div>
+        ))}
+        <TerminalInputLine>
+          <Prompt>{input.prompt}</Prompt>
+          <TerminalInput
+            value={input.command}
+            onChange={(e) => {
+              const { value } = e.target;
+              setInput((prev) => ({ ...prev, command: value }));
+            }}
+            autoFocus
+          />
+        </TerminalInputLine>
         <button type="submit" hidden>submit</button>
       </form>
     </StyledTerminal>
